@@ -1,13 +1,23 @@
 import { useEffect, useState, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, SafeAreaView, Platform, TextInput, Image } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, SafeAreaView, Platform, TextInput, Image, Linking } from 'react-native';
 import { Video } from 'expo-av';
 import { io, Socket } from 'socket.io-client';
 import * as SecureStore from 'expo-secure-store';
 import { colors, spacing, radius, typography } from '../styles/theme';
 import api from '../api/client';
 
-const SOCKET_URL = process.env.EXPO_PUBLIC_SOCKET_URL || process.env.EXPO_PUBLIC_API_URL || 'http://localhost:4000';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:4000';
+const SOCKET_URL = process.env.EXPO_PUBLIC_SOCKET_URL || API_URL;
 const TOKEN_KEY = 'quisi_token';
+
+function resolveMediaUrl(value?: string | null) {
+  if (!value) return null;
+  if (value.startsWith('data:')) return value;
+  if (value.startsWith('http://') || value.startsWith('https://')) return value;
+  if (value.startsWith('/')) return `${API_URL}${value}`;
+  if (/^[A-Za-z]:\\/.test(value)) return null;
+  return value;
+}
 
 async function getStoredToken(): Promise<string | null> {
   if (Platform.OS === 'web') {
@@ -29,6 +39,8 @@ export default function QuizScreen({ route, navigation }: any) {
   const { sessionId, code } = route.params;
   const [question, setQuestion] = useState<any>(null);
   const [answered, setAnswered] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [timer, setTimer] = useState(0);
   const [shortAnswer, setShortAnswer] = useState('');
   const startTime = useRef(Date.now());
@@ -50,6 +62,8 @@ export default function QuizScreen({ route, navigation }: any) {
       socket.on('question:show', ({ question: q, timerSec }) => {
         setQuestion(q);
         setAnswered(false);
+        setSending(false);
+        setSelectedAnswer(null);
         setTimer(timerSec || 30);
         setShortAnswer('');
         startTime.current = Date.now();
@@ -69,9 +83,12 @@ export default function QuizScreen({ route, navigation }: any) {
   }, [sessionId]);
 
   const submitAnswer = async (answer: string) => {
-    if (answered || !question) return;
+    if (answered || sending || !question) return;
+    if (!answer) return;
     setAnswered(true);
-    const responseTimeMs = Date.now() - startTime.current;
+    setSending(true);
+    setSelectedAnswer(answer);
+    const responseTimeMs = Math.max(0, Date.now() - startTime.current);
 
     try {
       const { data } = await api.post('/responses', {
@@ -90,8 +107,16 @@ export default function QuizScreen({ route, navigation }: any) {
         ]
       );
     } catch (e: any) {
-      Alert.alert('Erreur', e.response?.data?.error || 'Envoi impossible');
+      const apiError = e.response?.data;
+      let message = apiError?.error || 'Envoi impossible';
+      if (apiError?.details?.length) {
+        message += `\n${apiError.details.map((d: any) => d.message).join(', ')}`;
+      }
+      Alert.alert('Erreur', message);
       setAnswered(false);
+      setSelectedAnswer(null);
+    } finally {
+      setSending(false);
     }
   };
 
@@ -117,26 +142,46 @@ export default function QuizScreen({ route, navigation }: any) {
           <Text style={styles.qIndex}>Question {(question.index ?? 0) + 1}</Text>
           <Text style={styles.questionText}>{question.text}</Text>
 
-          {question.image && (
-            <Image source={{ uri: question.image }} style={styles.mediaImage} resizeMode="contain" />
+          {resolveMediaUrl(question.image) && (
+            <Image
+              source={{ uri: resolveMediaUrl(question.image) as string }}
+              style={styles.mediaImage}
+              resizeMode="contain"
+            />
           )}
 
-          {question.video && (
+          {resolveMediaUrl(question.video) && Platform.OS !== 'web' && (
             <Video
-              source={{ uri: question.video }}
+              source={{ uri: resolveMediaUrl(question.video) as string }}
               style={styles.mediaVideo}
               useNativeControls
               resizeMode="contain"
             />
           )}
 
+          {resolveMediaUrl(question.video) && Platform.OS === 'web' && (
+            <View style={styles.webVideoCard}>
+              <Text style={styles.webVideoLabel}>Video disponible</Text>
+              <TouchableOpacity
+                style={styles.webVideoBtn}
+                onPress={() => Linking.openURL(resolveMediaUrl(question.video) as string)}
+              >
+                <Text style={styles.webVideoBtnText}>Ouvrir la video</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {(question.type === 'multiple_choice' || question.type === 'poll') &&
             question.options?.map((opt: any) => (
               <TouchableOpacity
                 key={opt.id}
-                style={[styles.option, answered && styles.optionDisabled]}
+                style={[
+                  styles.option,
+                  selectedAnswer === opt.id && styles.optionSelected,
+                  (answered || sending) && styles.optionDisabled,
+                ]}
                 onPress={() => submitAnswer(opt.id)}
-                disabled={answered}
+                disabled={answered || sending}
                 activeOpacity={0.8}
               >
                 <Text style={styles.optionText}>{opt.label}</Text>
@@ -148,9 +193,13 @@ export default function QuizScreen({ route, navigation }: any) {
               {['true', 'false'].map((v) => (
                 <TouchableOpacity
                   key={v}
-                  style={[styles.tfBtn, answered && styles.optionDisabled]}
+                  style={[
+                    styles.tfBtn,
+                    selectedAnswer === v && styles.tfSelected,
+                    (answered || sending) && styles.optionDisabled,
+                  ]}
                   onPress={() => submitAnswer(v)}
-                  disabled={answered}
+                  disabled={answered || sending}
                 >
                   <Text style={styles.tfText}>{v === 'true' ? 'Vrai' : 'Faux'}</Text>
                 </TouchableOpacity>
@@ -169,11 +218,11 @@ export default function QuizScreen({ route, navigation }: any) {
                 editable={!answered}
               />
               <TouchableOpacity
-                style={[styles.shortAnswerBtn, answered && styles.optionDisabled]}
+                style={[styles.shortAnswerBtn, (answered || sending) && styles.optionDisabled]}
                 onPress={() => submitAnswer(shortAnswer.trim())}
-                disabled={answered || !shortAnswer.trim()}
+                disabled={answered || sending || !shortAnswer.trim()}
               >
-                <Text style={styles.shortAnswerBtnText}>Envoyer</Text>
+                <Text style={styles.shortAnswerBtnText}>{sending ? 'Envoi...' : 'Envoyer'}</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -226,6 +275,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.borderSubtle,
   },
+  optionSelected: { borderColor: colors.primary, backgroundColor: colors.primaryMuted },
   optionDisabled: { opacity: 0.6 },
   optionText: { color: colors.text, fontSize: typography.body, lineHeight: 22 },
   tfRow: { flexDirection: 'row', gap: spacing.md },
@@ -238,6 +288,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  tfSelected: { borderColor: colors.primary, backgroundColor: colors.primaryMuted },
   tfText: { color: colors.text, fontWeight: '700', fontSize: typography.h2 },
   shortAnswerBlock: { marginTop: spacing.md, gap: spacing.sm },
   shortAnswerInput: {
@@ -269,4 +320,20 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
     backgroundColor: colors.surfaceRaised,
   },
+  webVideoCard: {
+    padding: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    marginBottom: spacing.lg,
+  },
+  webVideoLabel: { color: colors.text, fontWeight: '600', marginBottom: spacing.sm },
+  webVideoBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    alignItems: 'center',
+  },
+  webVideoBtnText: { color: '#0a0c10', fontWeight: '700' },
 });

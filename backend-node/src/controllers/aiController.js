@@ -2,11 +2,25 @@ import { Quiz } from '../models/Quiz.js';
 import { Question } from '../models/Question.js';
 import { aiClient } from '../services/aiClient.js';
 
+function ensureOptionIds(options) {
+  if (!Array.isArray(options)) return options;
+  return options.map((o, i) => ({
+    ...o,
+    id: o.id || String.fromCharCode(97 + i),
+  }));
+}
+
 function normalizeOptions(type, options, correctAnswer) {
-  if (type !== 'multiple_choice' || !Array.isArray(options)) return options;
-  const hasCorrect = options.some((o) => o.isCorrect);
-  if (hasCorrect || !correctAnswer) return options;
-  return options.map((o) => ({ ...o, isCorrect: o.id === correctAnswer }));
+  if (!Array.isArray(options)) return options;
+  const withIds = ensureOptionIds(options);
+  if (type !== 'multiple_choice') return withIds;
+  const hasCorrect = withIds.some((o) => o.isCorrect);
+  if (hasCorrect) return withIds;
+  if (!correctAnswer) return withIds;
+  return withIds.map((o) => ({
+    ...o,
+    isCorrect: o.id === correctAnswer || o.label === correctAnswer,
+  }));
 }
 
 export async function generateQuiz(req, res, next) {

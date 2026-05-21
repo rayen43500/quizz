@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, TextInput, StyleSheet, Alert, Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import { colors, spacing, radius, typography } from '../styles/theme';
@@ -8,6 +8,9 @@ import PrimaryButton from '../components/PrimaryButton';
 
 export default function JoinSessionScreen({ navigation }: any) {
   const [code, setCode] = useState('');
+  const [sessionInfo, setSessionInfo] = useState<{ title?: string; topic?: string; status?: string } | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [checkError, setCheckError] = useState('');
 
   const storeSessionId = async (sessionId: string) => {
     if (Platform.OS === 'web') {
@@ -36,6 +39,34 @@ export default function JoinSessionScreen({ navigation }: any) {
     }
   };
 
+  useEffect(() => {
+    if (code.length !== 6) {
+      setSessionInfo(null);
+      setCheckError('');
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setChecking(true);
+      setCheckError('');
+      try {
+        const { data } = await api.get(`/sessions/code/${code.toUpperCase()}`);
+        setSessionInfo({
+          title: data.session?.quiz?.title,
+          topic: data.session?.quiz?.topic,
+          status: data.session?.status,
+        });
+      } catch (e: any) {
+        setSessionInfo(null);
+        setCheckError(e.response?.data?.error || 'Session introuvable');
+      } finally {
+        setChecking(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [code]);
+
   return (
     <View style={styles.container}>
       <ScreenHeader
@@ -57,6 +88,15 @@ export default function JoinSessionScreen({ navigation }: any) {
           textAlign="center"
           autoFocus
         />
+        {checking && <Text style={styles.checking}>Verification du quiz...</Text>}
+        {!!sessionInfo && (
+          <View style={styles.sessionCard}>
+            <Text style={styles.sessionTitle}>{sessionInfo.title || 'Quiz'}</Text>
+            {!!sessionInfo.topic && <Text style={styles.sessionTopic}>{sessionInfo.topic}</Text>}
+            {!!sessionInfo.status && <Text style={styles.sessionStatus}>Statut: {sessionInfo.status}</Text>}
+          </View>
+        )}
+        {!!checkError && <Text style={styles.checkError}>{checkError}</Text>}
       </View>
 
       <PrimaryButton title="Entrer dans la session" onPress={join} style={styles.cta} />
@@ -92,5 +132,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  checking: { textAlign: 'center', color: colors.textMuted, marginTop: spacing.md },
+  checkError: { textAlign: 'center', color: colors.accent, marginTop: spacing.md, fontWeight: '600' },
+  sessionCard: {
+    marginTop: spacing.lg,
+    padding: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+  },
+  sessionTitle: { fontSize: typography.h2, fontWeight: '700', color: colors.text, textAlign: 'center' },
+  sessionTopic: { marginTop: spacing.xs, color: colors.textMuted, textAlign: 'center' },
+  sessionStatus: { marginTop: spacing.sm, color: colors.textFaint, textAlign: 'center' },
   cta: { width: '100%' },
 });

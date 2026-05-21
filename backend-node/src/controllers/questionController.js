@@ -33,9 +33,13 @@ const questionSchema = z.object({
     }
   }
   if (val.video) {
-    if (!val.video.startsWith('data:video/')) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'video must be data:video/* base64' });
-    } else if (Buffer.byteLength(val.video, 'utf8') > maxVideoBytes) {
+    const isData = val.video.startsWith('data:video/');
+    const isUrl = val.video.startsWith('http://') || val.video.startsWith('https://');
+    const isPath = val.video.startsWith('/');
+    if (!isData && !isUrl && !isPath) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'video must be data:video/*, URL, or /path' });
+    }
+    if (isData && Buffer.byteLength(val.video, 'utf8') > maxVideoBytes) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'video too large (max 15MB)' });
     }
   }
