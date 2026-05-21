@@ -1,0 +1,54 @@
+services:
+  mongo:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api-node:
+    build: ./backend-node
+    ports:
+      - "4000:4000"
+    environment:
+      MONGODB_URI: mongodb://mongo:27017/quisi
+      JWT_SECRET: ${JWT_SECRET:-quisi-docker-dev-secret}
+      NODE_PORT: 4000
+      CORS_ORIGIN: http://localhost:5173,http://localhost:8081
+      AI_SERVICE_URL: http://api-ai:8000
+      AI_SERVICE_INTERNAL_KEY: ${AI_SERVICE_INTERNAL_KEY:-quisi-internal-ai-key}
+    depends_on:
+      mongo:
+        condition: service_healthy
+      api-ai:
+        condition: service_started
+
+  api-ai:
+    build: ./backend-ai
+    ports:
+      - "8000:8000"
+    environment:
+      AI_PROVIDER: ${AI_PROVIDER:-openai}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash}
+      INTERNAL_KEY: ${AI_SERVICE_INTERNAL_KEY:-quisi-internal-ai-key}
+
+  dashboard:
+    build:
+      context: ./dashboard
+      args:
+        VITE_API_URL: http://localhost:4000
+    ports:
+      - "5173:80"
+    depends_on:
+      - api-node
+
+volumes:
+  mongo_data:

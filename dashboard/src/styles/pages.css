@@ -1,0 +1,103 @@
+/* Shared app pages — consistent hierarchy */
+
+.page-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: var(--space-6);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-10);
+}
+
+.quiz-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-6);
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-4);
+  transition: border-color var(--transition);
+}
+
+.quiz-card:hover {
+  border-color: rgba(45, 212, 191, 0.2);
+}
+
+.quiz-card h3 {
+  font-size: var(--text-lg);
+  margin-bottom: var(--space-1);
+}
+
+.quiz-card-meta {
+  font-size: var(--text-sm);
+  color: var(--text-faint);
+}
+
+.quiz-card-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.form-card {
+  margin-bottom: var(--space-8);
+}
+
+.live-assistant-banner {
+  margin-bottom: var(--space-6);
+  padding: var(--space-5) var(--space-6);
+  background: var(--accent-muted);
+  border: 1px solid rgba(251, 113, 133, 0.25);
+  border-radius: var(--radius-md);
+  border-left: 4px solid var(--accent);
+}
+
+.live-assistant-banner strong {
+  display: block;
+  font-family: var(--font-display);
+  margin-bottom: var(--space-2);
+}
+
+.live-metric-grid .card {
+  padding: var(--space-6);
+  text-align: left;
+}
+
+.live-metric-grid p {
+  font-size: var(--text-sm);
+  color: var(--text-faint);
+  margin-bottom: var(--space-2);
+}
+
+.live-metric-grid h2 {
+  font-size: var(--text-3xl);
+  font-weight: 800;
+}
+
+.heatmap-bar {
+  margin-bottom: var(--space-4);
+}
+
+.heatmap-bar-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.heatmap-track {
+  height: 8px;
+  background: var(--bg);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.heatmap-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary), #5eead4);
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
